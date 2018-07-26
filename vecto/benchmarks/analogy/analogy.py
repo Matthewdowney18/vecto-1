@@ -9,6 +9,7 @@ import progressbar
 import fnmatch
 import sklearn
 from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
 import re
 import json
 from itertools import product
@@ -342,7 +343,7 @@ class Analogy(Benchmark):
         return results
 
     def group_subcategory_results(self, results):
-        # group analogy results, based on the category
+        # group analogy.py results, based on the category
         new_results = {}
         for result in results:
             cnt_correct = 0
@@ -556,6 +557,12 @@ class LRCos(Analogy):
                 cache_size=1000,
                 class_weight='balanced',
                 probability=True)
+        if self.name_classifier == "NN":
+            model_regression = MLPClassifier(
+                activation='logistic',
+                learning_rate= 'adaptive',
+                max_iter = 5000
+            )
         # print(Y_train)
         model_regression.fit(X_train, Y_train)
         score_reg = model_regression.predict_proba(self.embs.matrix)[:, 1]
