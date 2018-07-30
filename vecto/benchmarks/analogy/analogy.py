@@ -10,6 +10,7 @@ import fnmatch
 import sklearn
 from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
+from sklearn.preprocessing import StandardScaler
 import re
 import json
 from itertools import product
@@ -27,10 +28,12 @@ class Analogy(Benchmark):
                  need_subsample=False,
                  size_cv_test=1,
                  set_aprimes_test=None,
-                 inverse_regularization_strength=1.0,
+                 inverse_regularization_strength=1,
                  exclude=True,
-                 name_classifier='LR',
-                 name_kernel="linear"):
+                 name_classifier='NN',
+                 name_kernel="linear",
+                 hidden_layer_sizes = (50,25)):
+        self.hidden_layer_sizes = hidden_layer_sizes
         self.normalize = normalize
         self.ignore_oov = ignore_oov
         self.do_top5 = do_top5
@@ -62,6 +65,19 @@ class Analogy(Benchmark):
             return v
         else:
             return v / np.linalg.norm(v)
+
+    def make_dict(self):
+        dict = {}
+        dict["name_classifier"] = self.name_classifier
+        dict["normalize"] = self.normalize
+        dict["size_cv_test"] = self.size_cv_test
+        dict["ignore_oov"] = self.ignore_oov
+        dict["name_kernel"] = self.name_kernel
+        dict["inverse_regularization_strength"] = self.inverse_regularization_strength
+        dict["exclude"] = self.exclude
+        dict["do_top5"] = self.do_top5
+        dict["hidden layer size "] =self.hidden_layer_sizes
+        return dict
 
     def get_most_similar_fast(self, v):
         scores = self.normed(v) @ self.embs._normalized_matrix.T
@@ -231,9 +247,10 @@ class Analogy(Benchmark):
 
         self.cnt_total_correct = 0
         self.cnt_total_total = 0
-
+        print(name_subcategory)
         details = []
         kf = sklearn.model_selection.KFold(n_splits=len(pairs) // self.size_cv_test)
+        print(kf.get_n_splits())
         cnt_splits = kf.get_n_splits(pairs)
         loo = kf.split(pairs)
         if self.need_subsample:
@@ -279,6 +296,7 @@ class Analogy(Benchmark):
         experiment_setup["task"] = "word_analogy"
         experiment_setup["measurement"] = "accuracy"
         experiment_setup["method"] = self.method
+        experiment_setup["classifier"] = self.make_dict()
         if not self.exclude:
             experiment_setup["method"] += "_honest"
         experiment_setup["timestamp"] = datetime.datetime.now().isoformat()
@@ -343,7 +361,7 @@ class Analogy(Benchmark):
         return results
 
     def group_subcategory_results(self, results):
-        # group analogy.py results, based on the category
+        # group analogy.py LRresults, based on the category
         new_results = {}
         for result in results:
             cnt_correct = 0
@@ -478,15 +496,15 @@ class ThreeCosMul2(PairWise):
 #
 # class SimilarToB(Analogy):
 #     def do_test_on_pairs(self, pairs_train, pairs_test):
-#         results = []
+#         LRresults = []
 #         for p_test in pairs_test:
 #             if self.is_pair_missing([p_test]):
 #                 continue
 #             result = self.do_on_two_pairs(p_test)
 #             result["b in neighbourhood of b_prime"] = self.get_rank(p_test[0], p_test[1][0])
 #             result["b_prime in neighbourhood of b"] = self.get_rank(p_test[1], p_test[0])
-#             results.append(result)
-#         return results
+#             LRresults.append(result)
+#         return LRresults
 #
 #     def do_on_two_pairs(self, pair_test):
 #         if self.is_pair_missing([pair_test]):
@@ -547,7 +565,7 @@ class LRCos(Analogy):
         X_train, Y_train = self.gen_vec_single(p_train)
         if self.name_classifier.startswith("LR"):
             # model_regression = LogisticRegression(class_weight = 'balanced')
-            # model_regression = Pipeline([('poly', PolynomialFeatures(degree=3)), ('logistic', LogisticRegression(class_weight = 'balanced',C=C))])
+            #model_regression = Pipeline([('poly', PolynomialFeatures(degree=3)), ('logistic', LogisticRegression(class_weight = 'balanced',C=C))])
             model_regression = LogisticRegression(
                 class_weight='balanced',
                 C=self.inverse_regularization_strength)
@@ -561,11 +579,15 @@ class LRCos(Analogy):
             model_regression = MLPClassifier(
                 activation='logistic',
                 learning_rate= 'adaptive',
-                max_iter = 5000
-            )
+                max_iter = 5000,
+                hidden_layer_sizes = self.hidden_layer_sizes
+                )
         # print(Y_train)
         model_regression.fit(X_train, Y_train)
         score_reg = model_regression.predict_proba(self.embs.matrix)[:, 1]
+        #print(model_regression.validation_scores_)
+        #print(model_regression.loss)
+        #print(model_regression.loss_curve_)
         for p_test_one in p_test:
             if self.is_pair_missing([p_test_one]):
                 # file_out.write("{}\t{}\t{}\n".format(p_test_one[0],p_test_one[1],"MISSING"))
